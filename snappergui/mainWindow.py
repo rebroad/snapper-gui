@@ -66,9 +66,9 @@ class SnapperGUI():
     def update_controlls_and_userdatatreeview(self):
         config = self.get_current_config()
         userdatatreeview = self.builder.get_object("userdatatreeview")
-        if config is not None:
+        if config is not None and config in self.configView:
             model, paths = self.configView[config].selection.get_selected_rows()
-        if config is None or len(paths) == 0:
+        if config is None or config not in self.configView or len(paths) == 0:
             self.builder.get_object("snapshotActions").set_sensitive(False)
             userdatatreeview.set_model(None)
         else:
@@ -90,7 +90,7 @@ class SnapperGUI():
 
     def on_create_snapshot(self, widget):
         config = self.get_current_config()
-        if config is None:
+        if config is None or config not in self.configView:
             self.on_create_config(widget)
             return
         dialog = createSnapshot(self.window, config)
@@ -233,6 +233,8 @@ class SnapperGUI():
         print("Snapshot SnapshotModified")
 
     def on_dbus_snapshots_deleted(self, config, snapshots):
+        if config not in self.configView:
+            return
         snaps_str = ""
         for snapshot in snapshots:
             snaps_str += str(snapshot) + " "
