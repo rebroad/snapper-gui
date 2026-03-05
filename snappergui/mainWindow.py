@@ -229,7 +229,9 @@ class SnapperGUI():
     def on_dbus_config_created(self, config):
         self.configView[config] = snapshotsView(config)
         self.configView[config].update_view()
-        self.stack.add_titled(self.configView[config]._TreeView, config, config)
+        self.stack.add_titled(self.configView[config].scrolledwindow, config, config)
+        self.configView[config].selection.connect("changed",
+                                                  self.on_snapshots_selection_changed)
         self.statusbar.push(5, "Created new configuration %s" % config)
 
     def on_dbus_config_modified(self, args):
