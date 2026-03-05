@@ -87,7 +87,10 @@ class SnapperGUI():
                 pass
 
     def on_create_snapshot(self, widget):
-        dialog = createSnapshot(self.window, self.get_current_config())
+        config = self.get_current_config()
+        if config is None:
+            return
+        dialog = createSnapshot(self.window, config)
         response = dialog.run()
         dialog.destroy()
         if response == Gtk.ResponseType.OK:
@@ -112,8 +115,12 @@ class SnapperGUI():
 
     def on_delete_snapshot(self, widget):
         config = self.get_current_config()
+        if config is None or config not in self.configView:
+            return
         selection = self.configView[config].selection
         (model, paths) = selection.get_selected_rows()
+        if len(paths) == 0:
+            return
         snapshots = []
         for path in paths:
             treeiter = model.get_iter(path)
@@ -131,8 +138,12 @@ class SnapperGUI():
 
     def on_open_snapshot_folder(self, widget):
         config = self.get_current_config()
+        if config is None or config not in self.configView:
+            return
         selection = self.configView[config].selection
         model, paths = selection.get_selected_rows()
+        if len(paths) == 0:
+            return
         for path in paths:
             treeiter = model.get_iter(path)
             mountpoint = snapper.GetMountPoint(config, model[treeiter][0])
@@ -145,8 +156,12 @@ class SnapperGUI():
 
     def on_viewchanges_clicked(self, widget):
         config = self.get_current_config()
+        if config is None or config not in self.configView:
+            return
         selection = self.configView[config].selection
         model, paths = selection.get_selected_rows()
+        if len(paths) == 0:
+            return
         if len(paths) > 1:
             # open a changes window with the first and the last snapshot selected
             begin = model[paths[0]][0]

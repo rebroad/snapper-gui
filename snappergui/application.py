@@ -44,7 +44,14 @@ class Application(Gtk.Application):
         dialog.dialog.hide()
 
     def about(self, action, param):
-        pass
+        dialog = Gtk.AboutDialog(transient_for=self.snappergui.window, modal=True)
+        dialog.set_program_name("SnapperGUI")
+        dialog.set_version("0.1")
+        dialog.set_comments("A user interface for snapper filesystem snapshot management")
+        dialog.set_license_type(Gtk.License.GPL_2_0)
+        dialog.set_website("https://github.com/ricardo-vieira/snapper-gui")
+        dialog.run()
+        dialog.destroy()
 
     def quit(self, action=None, param=None):
         self.snappergui.window.destroy()

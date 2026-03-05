@@ -52,6 +52,9 @@ class propertiesDialog(object):
 
     def __init__(self, widget, parent):
         self.parent = parent
+        self.config_names = []
+        self.permission_denied = False
+        self.config_load_error = None
 
         builder = Gtk.Builder()
         builder.add_from_file(pkg_resources.resource_filename("snappergui",
@@ -63,10 +66,38 @@ class propertiesDialog(object):
         self.dialog.set_transient_for(parent)
 
         self.tabs = {}
-        for config in snapper.ListConfigs():
+        try:
+            configs = snapper.ListConfigs()
+        except dbus.exceptions.DBusException as error:
+            configs = []
+            error_str = str(error)
+            if "AccessDenied" in error_str or "error.no_permission" in error_str:
+                self.permission_denied = True
+            else:
+                self.config_load_error = error_str
+
+        for config in configs:
             currentTab = PropertiesTab(config)
-            self.tabs[str(config[0])] = currentTab
-            self.notebook.append_page(currentTab.configsGrid, Gtk.Label.new(config[0]))
+            config_name = str(config[0])
+            self.config_names.append(config_name)
+            self.tabs[config_name] = currentTab
+            self.notebook.append_page(currentTab.configsGrid, Gtk.Label.new(config_name))
+
+        if len(self.config_names) == 0:
+            warning_text = "No snapper configurations are available."
+            if self.permission_denied:
+                warning_text += "\nPermission denied while reading configurations."
+            elif self.config_load_error:
+                warning_text += "\nCould not read configurations."
+            warning_label = Gtk.Label.new(warning_text)
+            warning_label.set_line_wrap(True)
+            warning_label.set_margin_left(10)
+            warning_label.set_margin_right(10)
+            warning_label.set_margin_top(10)
+            warning_label.set_margin_bottom(10)
+            warning_label.set_xalign(0)
+            self.notebook.append_page(warning_label, Gtk.Label.new("Warning"))
+            self.dialog.set_response_sensitive(Gtk.ResponseType.OK, False)
         self.notebook.show_all()
 
     def get_changed_settings(self, config):
@@ -79,7 +110,11 @@ class propertiesDialog(object):
 
     def on_response(self, widget, response):
         if response == Gtk.ResponseType.OK:
-            currentConfig = str(snapper.ListConfigs()[self.notebook.get_current_page()][0])
+            current_page = self.notebook.get_current_page()
+            if current_page < 0 or current_page >= len(self.config_names):
+                self.dialog.destroy()
+                return
+            currentConfig = self.config_names[current_page]
             try:
                 snapper.SetConfig(currentConfig, self.get_changed_settings(currentConfig))
             except dbus.exceptions.DBusException as error:
