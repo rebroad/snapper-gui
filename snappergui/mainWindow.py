@@ -8,6 +8,7 @@ from snappergui.snapshotsView import snapshotsView
 from gi.repository import Gtk
 from time import strftime, localtime
 from pwd import getpwuid
+import os
 
 
 class SnapperGUI():
@@ -89,6 +90,7 @@ class SnapperGUI():
     def on_create_snapshot(self, widget):
         config = self.get_current_config()
         if config is None:
+            self.on_create_config(widget)
             return
         dialog = createSnapshot(self.window, config)
         response = dialog.run()
@@ -102,14 +104,37 @@ class SnapperGUI():
             pass
 
     def on_create_config(self, widget):
+        if os.geteuid() != 0:
+            error_dialog = Gtk.MessageDialog(
+                self.window, 0, Gtk.MessageType.WARNING, Gtk.ButtonsType.OK,
+                "Creating configurations requires root privileges.\n"
+                "Please re-run snapper-gui as root."
+            )
+            error_dialog.run()
+            error_dialog.destroy()
+            return
+
         dialog = createConfig(self.window)
         response = dialog.run()
         dialog.destroy()
         if response == Gtk.ResponseType.OK:
-            snapper.CreateConfig(dialog.name,
-                                 dialog.subvolume,
-                                 dialog.fstype,
-                                 dialog.template)
+            try:
+                snapper.CreateConfig(dialog.name,
+                                     dialog.subvolume,
+                                     dialog.fstype,
+                                     dialog.template)
+            except dbus.exceptions.DBusException as error:
+                error_str = str(error)
+                if ("error.no_permission" in error_str or
+                        "error.no_permissions" in error_str or
+                        "AccessDenied" in error_str):
+                    message = "You don't have permission to create configurations"
+                else:
+                    message = "Could not create configuration:\n%s" % error_str
+                error_dialog = Gtk.MessageDialog(self.window, 0, Gtk.MessageType.WARNING,
+                                                 Gtk.ButtonsType.OK, message)
+                error_dialog.run()
+                error_dialog.destroy()
         elif response == Gtk.ResponseType.CANCEL:
             pass
 
