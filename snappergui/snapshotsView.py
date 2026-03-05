@@ -64,6 +64,12 @@ class snapshotsView(Gtk.Widget):
 
     def add_snapshot_to_tree(self, snapshot, pre_snapshot=None):
         treemodel = self._TreeView.get_model()
+        if treemodel is None:
+            # View might not be realized yet; build the model on demand.
+            self.update_view()
+            treemodel = self._TreeView.get_model()
+            if treemodel is None:
+                return
         # Ignore if we are notified about snapshot we can't read details about.
         try:
             snapinfo = snapper.GetSnapshot(self.config, snapshot)

@@ -29,6 +29,7 @@ class SnapperGUI():
         self.window.set_application(app)
 
         self.configView = {}
+        self.pending_initial_snapshot_for = set()
 
         for config in snapper.ListConfigs():
             name = str(config[0])
@@ -119,16 +120,23 @@ class SnapperGUI():
         dialog.destroy()
         if response == Gtk.ResponseType.OK:
             try:
+                self.pending_initial_snapshot_for.add(dialog.name)
                 snapper.CreateConfig(dialog.name,
                                      dialog.subvolume,
                                      dialog.fstype,
                                      dialog.template)
             except dbus.exceptions.DBusException as error:
+                if dialog.name in self.pending_initial_snapshot_for:
+                    self.pending_initial_snapshot_for.remove(dialog.name)
                 error_str = str(error)
                 if ("error.no_permission" in error_str or
                         "error.no_permissions" in error_str or
                         "AccessDenied" in error_str):
                     message = "You don't have permission to create configurations"
+                elif "subvolume already covered" in error_str:
+                    message = ("Could not create configuration:\n"
+                               "The selected subvolume is already covered by an existing "
+                               "snapper configuration.")
                 else:
                     message = "Could not create configuration:\n%s" % error_str
                 error_dialog = Gtk.MessageDialog(self.window, 0, Gtk.MessageType.WARNING,
@@ -212,7 +220,13 @@ class SnapperGUI():
             snapper.connect_to_signal(signal, handler)
 
     def on_dbus_snapshot_created(self, config, snapshot):
-        self.statusbar.push(True, "Snapshot %s created for %s" % (str(snapshot), config))
+        if config not in self.configView:
+            return
+        if config in self.pending_initial_snapshot_for and str(snapshot) == "1":
+            self.statusbar.push(True, "Initial snapshot created for new configuration %s" % config)
+            self.pending_initial_snapshot_for.remove(config)
+        else:
+            self.statusbar.push(True, "Snapshot %s created for %s" % (str(snapshot), config))
         self.configView[config].add_snapshot_to_tree(str(snapshot))
 
     def on_dbus_snapshot_modified(self, config, snapshot):
@@ -233,6 +247,7 @@ class SnapperGUI():
         self.configView[config].selection.connect("changed",
                                                   self.on_snapshots_selection_changed)
         self.statusbar.push(5, "Created new configuration %s" % config)
+        self.pending_initial_snapshot_for.add(config)
 
     def on_dbus_config_modified(self, args):
         print("Config Modified")
