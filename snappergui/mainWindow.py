@@ -256,7 +256,22 @@ class SnapperGUI():
         print("Config Deleted")
 
     def on_main_destroy(self, args):
-        for config in snapper.ListConfigs():
-            for snapshot in snapper.ListSnapshots(config[0]):
+        try:
+            configs = snapper.ListConfigs()
+        except dbus.exceptions.DBusException:
+            return
+
+        for config in configs:
+            config_name = str(config[0])
+            try:
+                snapshots = snapper.ListSnapshots(config_name)
+            except dbus.exceptions.DBusException:
+                # Non-root users may not be allowed to list snapshots for all configs.
+                continue
+            for snapshot in snapshots:
                 if snapshot[6] != '':
-                    snapper.UmountSnapshot(config[0], snapshot[0], 'true')
+                    try:
+                        snapper.UmountSnapshot(config_name, snapshot[0], 'true')
+                    except dbus.exceptions.DBusException:
+                        # Ignore permission failures while shutting down.
+                        pass

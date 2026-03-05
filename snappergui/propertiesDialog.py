@@ -15,6 +15,10 @@ class PropertiesTab(object):
         self.widgets = {}
         for k, v in config[2].items():
             widget = builder.get_object(k)
+            if widget is None:
+                # Unknown/new snapper option without a dedicated UI control.
+                self.widgets[k] = None
+                continue
             # Values are set here depending on their types
             if type(widget) == Gtk.Entry:
                 widget.set_text(v)
@@ -31,11 +35,13 @@ class PropertiesTab(object):
                 elif v == "no":
                     widget.set_active(False)
             else:
-                print("ERROR: Could not handle property \"%s\"." % k)
+                print("WARNING: Unsupported widget type for property \"%s\"." % k)
             self.widgets[k] = widget
 
     def get_current_value(self, setting):
         widget = self.widgets[setting]
+        if widget is None:
+            return None
         if type(widget) == Gtk.Entry:
             return widget.get_text()
         elif type(widget) == Gtk.Switch:
