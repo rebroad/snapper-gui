@@ -17,14 +17,48 @@ class snapshotsView(Gtk.Widget):
         self.builder.connect_signals(self)
         self._TreeView = self.builder.get_object("snapstreeview")
         self.selection = self.builder.get_object("snapshotsSelection")
-        self.scrolledwindow = self.builder.get_object("scrolledwindow1")
+        self._scrolledwindow = self.builder.get_object("scrolledwindow1")
+        self._status_overlay_label = Gtk.Label()
+        self._status_overlay_label.set_halign(Gtk.Align.CENTER)
+        self._status_overlay_label.set_valign(Gtk.Align.CENTER)
+        self._status_overlay_label.set_justify(Gtk.Justification.CENTER)
+        self._status_overlay_label.set_line_wrap(True)
+        self._status_overlay_label.set_max_width_chars(60)
+        self._status_overlay_label.set_no_show_all(True)
+        self.scrolledwindow = Gtk.Overlay()
+        self.scrolledwindow.add(self._scrolledwindow)
+        self.scrolledwindow.add_overlay(self._status_overlay_label)
+        self.scrolledwindow.set_visible(True)
         self.count = 0
         self._TreeView.connect("realize", self.update_view)
+        self.update_view()
 
     def update_view(self, widget=None, user_data=None):
-        treestore = self.get_config_treestore()
-        if treestore:
-            self._TreeView.set_model(treestore)
+        treestore, status_message = self.get_config_treestore()
+        self._TreeView.set_model(treestore)
+        self.set_center_status(status_message)
+
+    def empty_treestore(self):
+        return Gtk.TreeStore(int, int, int, str, str, str, str)
+
+    def set_center_status(self, message):
+        if message:
+            self._status_overlay_label.set_text(message)
+            self._status_overlay_label.show()
+        else:
+            self._status_overlay_label.hide()
+
+    def format_snapper_list_error(self, error):
+        error_str = str(error)
+        if ("error.no_permission" in error_str or
+                "error.no_permissions" in error_str or
+                "AccessDenied" in error_str):
+            return "No permissions."
+        if hasattr(error, "get_dbus_message"):
+            dbus_message = error.get_dbus_message()
+            if dbus_message:
+                return dbus_message
+        return error_str
 
     def snapshot_columns(self, snapshot):
         if snapshot[3] == -1:
@@ -40,14 +74,17 @@ class snapshotsView(Gtk.Widget):
                 snapshot[6]]
 
     def get_config_treestore(self):
-        configstree = Gtk.TreeStore(int, int, int, str, str, str, str)
+        configstree = self.empty_treestore()
         # Check if the user has permission to see/edit this configuration
         try:
             snapshots_list = snapper.ListSnapshots(self.config)
-        except dbus.exceptions.DBusException:
-            return
+        except dbus.exceptions.DBusException as error:
+            self.count = 0
+            return configstree, self.format_snapper_list_error(error)
         parents = []
         self.count = len(snapshots_list)
+        if self.count == 0:
+            return configstree, "No snapshots"
         for snapshot in snapshots_list:
             if snapshot[1] == 1:  # Pre snapshot
                 parents.append(configstree.append(None, self.snapshot_columns(snapshot)))
@@ -60,7 +97,7 @@ class snapshotsView(Gtk.Widget):
                 configstree.append(parent_node, self.snapshot_columns(snapshot))
             else:  # Single snapshot
                 configstree.append(None, self.snapshot_columns(snapshot))
-        return configstree
+        return configstree, None
 
     def add_snapshot_to_tree(self, snapshot, pre_snapshot=None):
         treemodel = self._TreeView.get_model()
@@ -82,9 +119,12 @@ class snapshotsView(Gtk.Widget):
                     pre_snapshot = treemodel.get_iter(aux)
                     break
         treemodel.append(pre_snapshot, self.snapshot_columns(snapinfo))
+        self.set_center_status(None)
 
     def remove_snapshot_from_tree(self, snapshot):
         treemodel = self._TreeView.get_model()
+        if treemodel is None:
+            return
         for aux, row in enumerate(treemodel):
             if snapshot == row[0]:
                 has_child = treemodel.iter_has_child(treemodel.get_iter(aux))
@@ -93,6 +133,8 @@ class snapshotsView(Gtk.Widget):
                     self.update_view()
                 else:
                     del treemodel[aux]
+                    if treemodel.iter_n_children(None) == 0:
+                        self.set_center_status("No snapshots")
 
     def on_description_edited(self, widget, treepath, text):
         snapshot_row = self._TreeView.get_model()[treepath]
