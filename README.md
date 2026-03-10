@@ -31,7 +31,11 @@ Installation
 
     $ git clone https://github.com/ricardo-vieira/snapper-gui/
     $ cd snapper-gui/
-    # python3 setup.py install
+    $ sudo pip install .
+
+For development (editable install, changes take effect without reinstall):
+
+    $ sudo pip install -e .
 
 Screenshots
 -----------
