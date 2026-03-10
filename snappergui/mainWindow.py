@@ -104,6 +104,32 @@ class SnapperGUI():
         elif response == Gtk.ResponseType.CANCEL:
             pass
 
+    def _setup_btrfs_quota_for_config(self, config_name, subvolume_path):
+        """Set QGROUP in config and run setup-quota so Used Space and cleanup work."""
+        subvol_id = None
+        try:
+            output = subprocess.check_output(
+                ['btrfs', 'subvolume', 'show', subvolume_path],
+                universal_newlines=True, stderr=subprocess.DEVNULL
+            )
+            for line in output.splitlines():
+                line = line.strip()
+                if line.startswith('Subvolume ID:') or line.startswith('Subvol ID:'):
+                    parts = line.split()
+                    subvol_id = parts[-1]
+                    break
+        except (subprocess.CalledProcessError, OSError, FileNotFoundError):
+            pass
+        if subvol_id:
+            try:
+                snapper.SetConfig(config_name, {'QGROUP': '0/' + subvol_id})
+            except dbus.exceptions.DBusException:
+                pass
+        try:
+            subprocess.run(['snapper', 'setup-quota'], capture_output=True, timeout=300)
+        except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
+            pass
+
     def on_create_config(self, widget):
         if os.geteuid() != 0:
             error_dialog = Gtk.MessageDialog(
@@ -125,6 +151,9 @@ class SnapperGUI():
                                      dialog.subvolume,
                                      dialog.fstype,
                                      dialog.template)
+                # Set up btrfs qgroups so "Used Space" and space-aware cleanup work
+                if dialog.fstype == 'btrfs':
+                    self._setup_btrfs_quota_for_config(dialog.name, dialog.subvolume)
             except dbus.exceptions.DBusException as error:
                 if dialog.name in self.pending_initial_snapshot_for:
                     self.pending_initial_snapshot_for.remove(dialog.name)
